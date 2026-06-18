@@ -211,6 +211,7 @@ interface AuditState {
   setIssueDeadline: (issueId: string, deadline: string) => void;
   submitRectification: (issueId: string, note: string, photos?: { beforeUrl?: string; afterUrl?: string }) => void;
   reviewIssue: (issueId: string, pass: boolean, note?: string, photoUrl?: string) => void;
+  batchReviewIssues: (issueIds: string[], pass: boolean, note?: string) => void;
 
   resetDemoData: () => void;
 }
@@ -411,8 +412,10 @@ export const useAuditStore = create<AuditState>((set, get) => {
       const allSubmitted = pkgs.every((p) => p.status !== "pending");
       if (!allSubmitted) return;
 
-      const hasIssue = pkgs.some((p) => p.status === "issue");
-      const newStatus: TaskStatus = hasIssue ? "review" : "done";
+      const taskIssues = get().issues.filter((i) => i.taskId === taskId);
+      const hasUnclosedIssues = taskIssues.some((i) => i.status !== "closed");
+
+      const newStatus: TaskStatus = hasUnclosedIssues ? "review" : "done";
 
       set((s) => ({
         tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)),
@@ -548,6 +551,51 @@ export const useAuditStore = create<AuditState>((set, get) => {
       if (issue) {
         get().checkAndUpdateTaskStatus(issue.taskId);
       }
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    batchReviewIssues: (issueIds, pass, note) => {
+      const affectedTaskIds = new Set<string>();
+
+      set((s) => ({
+        issues: s.issues.map((i) => {
+          if (!issueIds.includes(i.id)) return i;
+          if (i.status !== "review") return i;
+          affectedTaskIds.add(i.taskId);
+          if (pass) {
+            return {
+              ...i,
+              status: "closed" as IssueStatus,
+              resolvedAt: TODAY,
+              timeline: [
+                ...i.timeline,
+                {
+                  node: "复核通过",
+                  at: TODAY,
+                  actor: ACTOR_REVIEWER,
+                  note: note || "批量复核通过",
+                },
+                { node: "关闭", at: TODAY, actor: "系统" },
+              ],
+            };
+          }
+          return {
+            ...i,
+            status: "rectifying" as IssueStatus,
+            timeline: [
+              ...i.timeline,
+              {
+                node: "复核退回",
+                at: TODAY,
+                actor: ACTOR_REVIEWER,
+                note: note || "批量退回，整改不到位",
+              },
+            ],
+          };
+        }),
+      }));
+
+      affectedTaskIds.forEach((tid) => get().checkAndUpdateTaskStatus(tid));
       saveToStorage(STORAGE_KEY, get());
     },
 

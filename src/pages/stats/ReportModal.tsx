@@ -1,25 +1,29 @@
 import { useState, useMemo } from "react";
 import { useAuditStore } from "@/store/useAuditStore";
 import { Modal } from "@/components/ui/Modal";
-import { categoryLabel } from "@/lib/format";
-import { FileText, Download, Calendar, Store as StoreIcon, TrendingUp, AlertTriangle, CheckCircle, Award, ListChecks } from "lucide-react";
+import { RiskBadge, IssueStatusBadge } from "@/components/ui/Badge";
+import { categoryLabel, formatDate } from "@/lib/format";
+import { FileText, Download, Calendar, Store as StoreIcon, TrendingUp, AlertTriangle, CheckCircle, Award, ListChecks, ArrowLeft, Image as ImageIcon, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Store as StoreType } from "@/types";
+import type { Issue } from "@/types";
 
 interface ReportModalProps {
   open: boolean;
   onClose: () => void;
 }
 
+type Step = "config" | "preview" | "detail";
+
 export function ReportModal({ open, onClose }: ReportModalProps) {
   const stores = useAuditStore((s) => s.stores);
   const issues = useAuditStore((s) => s.issues);
-  const tasks = useAuditStore((s) => s.tasks);
+  const packages = useAuditStore((s) => s.packages);
 
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(stores.map((s) => s.id));
   const [startDate, setStartDate] = useState("2026-05-01");
   const [endDate, setEndDate] = useState("2026-06-30");
-  const [step, setStep] = useState<"config" | "preview">("config");
+  const [step, setStep] = useState<Step>("config");
+  const [detailStoreId, setDetailStoreId] = useState<string | null>(null);
 
   const filteredIssues = useMemo(() => {
     return issues.filter((i) => {
@@ -39,12 +43,15 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
       const closed = storeIssues.filter((i) => i.status === "closed").length;
       const rectifyRate = total > 0 ? Math.round((closed / total) * 100) : 100;
       const highRisk = storeIssues.filter((i) => i.riskLevel === "high").length;
+      const evidenceCount = storeIssues.reduce((sum, i) => sum + i.evidence.length, 0);
       return {
         store,
         total,
         closed,
         rectifyRate,
         highRisk,
+        evidenceCount,
+        issues: storeIssues,
       };
     }).sort((a, b) => b.rectifyRate - a.rectifyRate || a.total - b.total);
   }, [filteredIssues, selectedStoreIds, stores]);
@@ -78,15 +85,36 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         totalStores: selectedStoreIds.length,
         totalIssues,
         totalClosed,
+        totalOpen: totalIssues - totalClosed,
         overallRectifyRate: overallRate,
+        totalEvidence: filteredIssues.reduce((sum, i) => sum + i.evidence.length, 0),
       },
-      storeRanking: storeStats.map((s) => ({
+      storeRanking: storeStats.map((s, idx) => ({
+        rank: idx + 1,
         store: s.store.name,
         code: s.store.code,
         totalIssues: s.total,
         closed: s.closed,
+        open: s.total - s.closed,
         rectifyRate: s.rectifyRate,
         highRisk: s.highRisk,
+        evidenceCount: s.evidenceCount,
+        closureStatus: s.rectifyRate === 100 ? "全部闭环" : s.rectifyRate >= 70 ? "大部分闭环" : "整改中",
+        issueList: s.issues.map((i) => ({
+          id: i.id,
+          type: i.type,
+          category: categoryLabel[i.category as keyof typeof categoryLabel] || i.category,
+          riskLevel: i.riskLevel,
+          status: i.status,
+          description: i.description,
+          createdAt: i.createdAt,
+          resolvedAt: i.resolvedAt || null,
+          deadline: i.deadline,
+          assignee: i.assignee,
+          rectifyNote: i.rectifyNote || null,
+          evidenceCount: i.evidence.length,
+          timelineNodes: i.timeline.length,
+        })),
       })),
       categoryBreakdown: categoryStats,
     };
@@ -99,17 +127,35 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
     URL.revokeObjectURL(url);
   };
 
+  const detailStore = detailStoreId ? storeStats.find((s) => s.store.id === detailStoreId) : null;
+
+  const handleClose = () => {
+    onClose();
+    setTimeout(() => {
+      setStep("config");
+      setDetailStoreId(null);
+    }, 200);
+  };
+
+  const subtitle = step === "config"
+    ? "选择门店和时间范围生成报告"
+    : step === "preview"
+    ? `报告预览 · ${startDate} 至 ${endDate}`
+    : detailStore
+    ? `${detailStore.store.name.replace("雅悦口腔·", "")} · 问题明细`
+    : "";
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="门店稽核报告"
-      subtitle={step === "config" ? "选择门店和时间范围生成报告" : `报告预览 · ${startDate} 至 ${endDate}`}
+      subtitle={subtitle}
       size="2xl"
       footer={
         step === "config" ? (
           <>
-            <button className="btn-ghost" onClick={onClose}>取消</button>
+            <button className="btn-ghost" onClick={handleClose}>取消</button>
             <button
               className="btn-primary"
               onClick={() => setStep("preview")}
@@ -118,9 +164,18 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
               <FileText className="h-4 w-4" /> 生成预览
             </button>
           </>
-        ) : (
+        ) : step === "preview" ? (
           <>
             <button className="btn-ghost" onClick={() => setStep("config")}>返回配置</button>
+            <button className="btn-primary" onClick={handleExport}>
+              <Download className="h-4 w-4" /> 导出报告
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="btn-ghost" onClick={() => setStep("preview")}>
+              <ArrowLeft className="h-4 w-4" /> 返回排名
+            </button>
             <button className="btn-primary" onClick={handleExport}>
               <Download className="h-4 w-4" /> 导出报告
             </button>
@@ -179,49 +234,34 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
 
           <div className="p-3 rounded-md bg-surfaceSunken border border-line-faint">
             <div className="text-xs text-ink-500">
-              将统计 <span className="font-semibold text-ink-700">{selectedStoreIds.length}</span> 家门店在所选时间范围内的稽核数据，包括问题汇总、整改完成率、门店排名及常见问题分布。
+              将统计 <span className="font-semibold text-ink-700">{selectedStoreIds.length}</span> 家门店在所选时间范围内的稽核数据，包括问题汇总、整改完成率、门店排名、问题明细及闭环情况。
             </div>
           </div>
         </div>
-      ) : (
+      ) : step === "preview" ? (
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
           <div className="grid grid-cols-4 gap-3">
-            <StatMini
-              icon={ListChecks}
-              label="问题总数"
-              value={String(totalIssues)}
-              color="text-ink-700"
-            />
-            <StatMini
-              icon={CheckCircle}
-              label="已闭环"
-              value={String(totalClosed)}
-              color="text-safe"
-            />
-            <StatMini
-              icon={TrendingUp}
-              label="整体整改率"
-              value={`${overallRate}%`}
-              color="text-brand-600"
-            />
-            <StatMini
-              icon={AlertTriangle}
-              label="高风险"
-              value={String(filteredIssues.filter((i) => i.riskLevel === "high").length)}
-              color="text-risk"
-            />
+            <StatMini icon={ListChecks} label="问题总数" value={String(totalIssues)} color="text-ink-700" />
+            <StatMini icon={CheckCircle} label="已闭环" value={String(totalClosed)} color="text-safe" />
+            <StatMini icon={TrendingUp} label="整体整改率" value={`${overallRate}%`} color="text-brand-600" />
+            <StatMini icon={AlertTriangle} label="高风险" value={String(filteredIssues.filter((i) => i.riskLevel === "high").length)} color="text-risk" />
           </div>
 
           <div className="panel p-4">
             <div className="label-mono mb-3 flex items-center gap-1.5">
               <Award className="h-3.5 w-3.5 text-ember-500" />
               门店整改率排名
+              <span className="ml-auto text-[10px] text-ink-400 font-normal">点击查看门店明细</span>
             </div>
             <div className="space-y-2">
               {storeStats.map((s, idx) => (
-                <div key={s.store.id} className="flex items-center gap-3">
+                <button
+                  key={s.store.id}
+                  onClick={() => { setDetailStoreId(s.store.id); setStep("detail"); }}
+                  className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-surfaceAlt transition-colors group"
+                >
                   <div className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center font-display font-bold text-[11px]",
+                    "w-6 h-6 rounded-full flex items-center justify-center font-display font-bold text-[11px] shrink-0",
                     idx === 0 ? "bg-ember-500 text-white" :
                     idx === 1 ? "bg-ink-300 text-white" :
                     idx === 2 ? "bg-amber-700 text-white" :
@@ -229,10 +269,17 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
                   )}>
                     {idx + 1}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-semibold text-ink-800 truncate">{s.store.name.replace("雅悦口腔·", "")}</span>
-                      <span className="font-mono text-xs text-ink-500">{s.total}个问题 · 高风险{s.highRisk}</span>
+                      <span className="font-mono text-xs text-ink-500">
+                        {s.total}个问题 · 高风险{s.highRisk}
+                        {s.evidenceCount > 0 && (
+                          <span className="ml-2 text-ink-400">
+                            <ImageIcon className="inline h-2.5 w-2.5" /> {s.evidenceCount}
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div className="h-1.5 bg-surfaceSunken rounded-full overflow-hidden">
                       <div
@@ -245,12 +292,13 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
                     </div>
                   </div>
                   <span className={cn(
-                    "font-display font-bold text-lg tabular-nums w-14 text-right",
+                    "font-display font-bold text-lg tabular-nums w-14 text-right shrink-0",
                     s.rectifyRate >= 90 ? "text-safe" : s.rectifyRate >= 70 ? "text-brand-600" : "text-caution"
                   )}>
                     {s.rectifyRate}%
                   </span>
-                </div>
+                  <ChevronRight className="h-4 w-4 text-ink-300 group-hover:text-ink-500 shrink-0" />
+                </button>
               ))}
             </div>
           </div>
@@ -284,7 +332,92 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
             报告生成时间：{new Date().toLocaleString("zh-CN")} · 数据来源：消毒追溯稽核系统
           </div>
         </div>
-      )}
+      ) : detailStore ? (
+        <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-4">
+          <div className="grid grid-cols-4 gap-3">
+            <StatMini icon={ListChecks} label="问题总数" value={String(detailStore.total)} color="text-ink-700" />
+            <StatMini icon={CheckCircle} label="已闭环" value={String(detailStore.closed)} color="text-safe" />
+            <StatMini icon={TrendingUp} label="整改率" value={`${detailStore.rectifyRate}%`} color="text-brand-600" />
+            <StatMini icon={ImageIcon} label="证据照片" value={String(detailStore.evidenceCount)} color="text-ember-600" />
+          </div>
+
+          <div className="panel p-4">
+            <div className="label-mono mb-3 flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5 text-brand-500" />
+              问题清单与闭环情况
+            </div>
+            <div className="space-y-2">
+              {detailStore.issues.map((issue: Issue) => {
+                const pkg = packages.find((p) => p.id === issue.packageId);
+                return (
+                  <div
+                    key={issue.id}
+                    className={cn(
+                      "p-3 rounded-md border",
+                      issue.status === "closed" ? "border-safe/20 bg-safe/5" : "border-line bg-surfaceAlt"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] text-ink-400">{issue.id}</span>
+                        <RiskBadge level={issue.riskLevel} />
+                        <IssueStatusBadge status={issue.status} />
+                      </div>
+                      {issue.evidence.length > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] text-ink-400 font-mono">
+                          <ImageIcon className="h-2.5 w-2.5" /> {issue.evidence.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm font-semibold text-ink-800 mb-1">{issue.type}</div>
+                    <div className="text-[11px] text-ink-400 leading-relaxed mb-2">{issue.description}</div>
+                    <div className="flex items-center gap-3 text-[10px] text-ink-400 font-mono">
+                      <span>批次：{pkg?.batchNo || "—"}</span>
+                      <span>发现：{formatDate(issue.createdAt)}</span>
+                      {issue.resolvedAt && <span className="text-safe">闭环：{formatDate(issue.resolvedAt)}</span>}
+                      <span>截止：{formatDate(issue.deadline)}</span>
+                    </div>
+                    {issue.rectifyNote && (
+                      <div className="mt-2 p-2 rounded bg-safe/5 border border-safe/10 flex items-start gap-1.5">
+                        <CheckCircle className="h-3 w-3 text-safe shrink-0 mt-0.5" />
+                        <span className="text-[11px] text-ink-600">{issue.rectifyNote}</span>
+                      </div>
+                    )}
+                    {issue.evidence.length > 0 && (
+                      <div className="mt-2 flex gap-1">
+                        {issue.evidence.slice(0, 6).map((e) => (
+                          <div
+                            key={e.id}
+                            className={cn(
+                              "h-8 w-10 rounded border flex items-center justify-center text-[8px] font-mono",
+                              e.type === "inspection" ? "bg-brand-50 border-brand-200 text-brand-600" :
+                              e.type === "rectify_before" ? "bg-caution/10 border-caution/30 text-caution" :
+                              e.type === "rectify_after" ? "bg-safe/10 border-safe/30 text-safe" :
+                              "bg-ink-100 border-ink-300 text-ink-500"
+                            )}
+                          >
+                            {e.type === "inspection" ? "核验" : e.type === "rectify_before" ? "前" : e.type === "rectify_after" ? "后" : "复核"}
+                          </div>
+                        ))}
+                        {issue.evidence.length > 6 && (
+                          <span className="text-[10px] text-ink-400 self-center">+{issue.evidence.length - 6}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {detailStore.issues.length === 0 && (
+                <div className="text-sm text-ink-400 text-center py-4">该门店在所选时间范围内无问题记录</div>
+              )}
+            </div>
+          </div>
+
+          <div className="text-[10px] text-ink-400 font-mono text-center pt-2">
+            {detailStore.store.name} · 门店编码 {detailStore.store.code} · 报告生成 {new Date().toLocaleString("zh-CN")}
+          </div>
+        </div>
+      ) : null}
     </Modal>
   );
 }
