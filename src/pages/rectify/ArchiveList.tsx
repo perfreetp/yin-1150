@@ -3,12 +3,13 @@ import { useAuditStore } from "@/store/useAuditStore";
 import { RiskBadge, IssueStatusBadge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
-import { Archive, Store as StoreIcon, ClipboardList, Package, ChevronDown, ChevronRight, Image as ImageIcon, CheckCircle2, Search } from "lucide-react";
+import { Archive, Store as StoreIcon, ClipboardList, Package, ChevronDown, ChevronRight, Image as ImageIcon, CheckCircle2, Search, GitBranch } from "lucide-react";
 import type { Issue } from "@/types";
 
 interface ArchiveListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onTraceBatch?: (packageId: string) => void;
 }
 
 type GroupMode = "store" | "task" | "batch";
@@ -25,7 +26,7 @@ const groupIcons: Record<GroupMode, typeof StoreIcon> = {
   batch: Package,
 };
 
-export function ArchiveList({ selectedId, onSelect }: ArchiveListProps) {
+export function ArchiveList({ selectedId, onSelect, onTraceBatch }: ArchiveListProps) {
   const issues = useAuditStore((s) => s.issues);
   const stores = useAuditStore((s) => s.stores);
   const tasks = useAuditStore((s) => s.tasks);
@@ -186,6 +187,16 @@ export function ArchiveList({ selectedId, onSelect }: ArchiveListProps) {
                       <ImageIcon className="h-2.5 w-2.5" />
                       {evidenceCount}
                     </span>
+                  )}
+                  {groupMode === "batch" && onTraceBatch && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onTraceBatch(group.key); }}
+                      title="查看闭环链路"
+                      className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-brand-500/20 bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
+                    >
+                      <GitBranch className="h-2.5 w-2.5" />
+                      链路
+                    </button>
                   )}
                 </div>
               </button>

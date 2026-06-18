@@ -18,6 +18,7 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
   const stores = useAuditStore((s) => s.stores);
   const issues = useAuditStore((s) => s.issues);
   const packages = useAuditStore((s) => s.packages);
+  const recordReportExport = useAuditStore((s) => s.recordReportExport);
 
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(stores.map((s) => s.id));
   const [startDate, setStartDate] = useState("2026-05-01");
@@ -55,7 +56,10 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         (sum, i) => sum + i.timeline.filter((n) => n.node === "复核退回").length,
         0
       );
-      const backlog = storeIssues.filter((i) => i.status !== "closed").length;
+      const reviewBacklog = storeIssues.filter((i) => i.status === "review").length;
+      const pendingCount = storeIssues.filter(
+        (i) => i.status === "open" || i.status === "rectifying"
+      ).length;
 
       return {
         store,
@@ -66,7 +70,8 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         evidenceCount,
         avgRectifyDays,
         rejections,
-        backlog,
+        reviewBacklog,
+        pendingCount,
         issues: storeIssues,
       };
     }).sort((a, b) => b.rectifyRate - a.rectifyRate || a.avgRectifyDays - b.avgRectifyDays);
@@ -98,7 +103,14 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
     [filteredIssues]
   );
 
-  const totalBacklog = filteredIssues.filter((i) => i.status !== "closed").length;
+  const totalReviewBacklog = useMemo(
+    () => filteredIssues.filter((i) => i.status === "review").length,
+    [filteredIssues]
+  );
+  const totalPendingCount = useMemo(
+    () => filteredIssues.filter((i) => i.status === "open" || i.status === "rectifying").length,
+    [filteredIssues]
+  );
 
   const toggleStore = (id: string) => {
     setSelectedStoreIds((prev) =>
@@ -120,7 +132,8 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         totalEvidence: filteredIssues.reduce((sum, i) => sum + i.evidence.length, 0),
         avgRectifyDays,
         totalRejections,
-        totalBacklog,
+        totalReviewBacklog,
+        totalPendingCount,
       },
       storeRanking: storeStats.map((s, idx) => ({
         rank: idx + 1,
@@ -134,7 +147,8 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         evidenceCount: s.evidenceCount,
         avgRectifyDays: s.avgRectifyDays,
         rejections: s.rejections,
-        backlog: s.backlog,
+        reviewBacklog: s.reviewBacklog,
+        pendingCount: s.pendingCount,
         closureStatus: s.rectifyRate === 100 ? "全部闭环" : s.rectifyRate >= 70 ? "大部分闭环" : "整改中",
         issueList: s.issues.map((i) => ({
           id: i.id,
@@ -161,6 +175,21 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
     a.download = `稽核报告_${startDate}_${endDate}.json`;
     a.click();
     URL.revokeObjectURL(url);
+
+    const batchNos = Array.from(
+      new Set(
+        filteredIssues
+          .map((i) => packages.find((p) => p.id === i.packageId)?.batchNo)
+          .filter((v): v is string => Boolean(v))
+      )
+    );
+    recordReportExport({
+      storeIds: selectedStoreIds,
+      issueIds: filteredIssues.map((i) => i.id),
+      batchNos,
+      totalIssues,
+      overallRectifyRate: overallRate,
+    });
   };
 
   const detailStore = detailStoreId ? storeStats.find((s) => s.store.id === detailStoreId) : null;
@@ -276,13 +305,14 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         </div>
       ) : step === "preview" ? (
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
             <StatMini icon={ListChecks} label="问题总数" value={String(totalIssues)} color="text-ink-700" />
             <StatMini icon={CheckCircle} label="已闭环" value={String(totalClosed)} color="text-safe" />
             <StatMini icon={TrendingUp} label="整体整改率" value={`${overallRate}%`} color="text-brand-600" />
             <StatMini icon={Clock} label="平均整改用时" value={`${avgRectifyDays}天`} color="text-brand-600" />
-            <StatMini icon={Eye} label="待办积压" value={String(totalBacklog)} color="text-ember-600" />
-            <StatMini icon={RotateCcw} label="累计退回" value={`${totalRejections}次`} color="text-caution" />
+            <StatMini icon={Eye} label="待复核积压" value={String(totalReviewBacklog)} color="text-ember-600" />
+            <StatMini icon={AlertTriangle} label="待处理" value={String(totalPendingCount)} color="text-caution" />
+            <StatMini icon={RotateCcw} label="累计退回" value={`${totalRejections}次`} color="text-risk" />
           </div>
 
           <div className="panel p-4">
@@ -311,7 +341,7 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-sm font-semibold text-ink-800 truncate">{s.store.name.replace("雅悦口腔·", "")}</span>
                         <span className="font-mono text-[11px] text-ink-500">
-                          {s.total}问题 · 高风险{s.highRisk} · 平均{s.avgRectifyDays || "—"}天 · 退回{s.rejections}次
+                          {s.total}问题 · 高风险{s.highRisk} · 平均{s.avgRectifyDays || "—"}天 · 待复核{s.reviewBacklog} · 退回{s.rejections}次
                         </span>
                       </div>
                       <div className="h-1.5 bg-surfaceSunken rounded-full overflow-hidden">
@@ -367,13 +397,14 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         </div>
       ) : detailStore ? (
         <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-4">
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
             <StatMini icon={ListChecks} label="问题总数" value={String(detailStore.total)} color="text-ink-700" />
             <StatMini icon={CheckCircle} label="已闭环" value={String(detailStore.closed)} color="text-safe" />
             <StatMini icon={TrendingUp} label="整改率" value={`${detailStore.rectifyRate}%`} color="text-brand-600" />
             <StatMini icon={Clock} label="平均整改用时" value={`${detailStore.avgRectifyDays || 0}天`} color="text-brand-600" />
-            <StatMini icon={RotateCcw} label="退回次数" value={`${detailStore.rejections}次`} color="text-caution" />
-            <StatMini icon={ImageIcon} label="证据照片" value={String(detailStore.evidenceCount)} color="text-ember-600" />
+            <StatMini icon={Eye} label="待复核积压" value={String(detailStore.reviewBacklog)} color="text-ember-600" />
+            <StatMini icon={RotateCcw} label="退回次数" value={`${detailStore.rejections}次`} color="text-risk" />
+            <StatMini icon={ImageIcon} label="证据照片" value={String(detailStore.evidenceCount)} color="text-ink-600" />
           </div>
 
           <div className="panel p-4">

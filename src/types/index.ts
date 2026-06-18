@@ -125,6 +125,18 @@ export interface SamplingRule {
   seed: string;
 }
 
+export interface ReportExportRecord {
+  id: string;
+  exportedAt: string;
+  storeIds: string[];
+  issueIds: string[];
+  batchNos: string[];
+  summary: {
+    totalIssues: number;
+    overallRectifyRate: number;
+  };
+}
+
 export interface PackageStandard {
   type: string;
   name: string;

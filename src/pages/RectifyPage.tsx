@@ -1,21 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { IssueList } from "./rectify/IssueList";
 import { ArchiveList } from "./rectify/ArchiveList";
 import { IssueDetail } from "./rectify/IssueDetail";
+import { BatchTraceChain } from "./rectify/BatchTraceChain";
 import { useAuditStore } from "@/store/useAuditStore";
 import { completionRate } from "@/lib/format";
-import { AlertTriangle, Wrench, Eye, CheckCircle2, TrendingUp, ListChecks, Archive } from "lucide-react";
+import { AlertTriangle, Wrench, Eye, CheckCircle2, TrendingUp, ListChecks, Archive, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "list" | "archive";
 
 export default function RectifyPage() {
   const issues = useAuditStore((s) => s.issues);
+  const [searchParams] = useSearchParams();
+
   const [selectedId, setSelectedId] = useState<string | null>(
     issues.find((i) => i.status !== "closed")?.id || issues[0]?.id || null
   );
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [tracePackageId, setTracePackageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const view = searchParams.get("view");
+    const issue = searchParams.get("issue");
+    if (view === "archive") setViewMode("archive");
+    if (issue) {
+      setSelectedId(issue);
+      setTracePackageId(null);
+    }
+  }, [searchParams]);
 
   const open = issues.filter((i) => i.status === "open").length;
   const rectifying = issues.filter((i) => i.status === "rectifying").length;
@@ -65,7 +80,11 @@ export default function RectifyPage() {
         {viewMode === "list" ? (
           <IssueList selectedId={selectedId} onSelect={setSelectedId} />
         ) : (
-          <ArchiveList selectedId={selectedId} onSelect={setSelectedId} />
+          <ArchiveList
+            selectedId={selectedId}
+            onSelect={(id) => { setSelectedId(id); setTracePackageId(null); }}
+            onTraceBatch={(pid) => setTracePackageId(pid)}
+          />
         )}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="shrink-0 flex items-center gap-1 px-4 py-2 border-b border-line bg-surfaceAlt">
@@ -89,13 +108,26 @@ export default function RectifyPage() {
               <Archive className="h-3.5 w-3.5" />
               门店档案
             </button>
-            {viewMode === "archive" && (
+            {tracePackageId && (
+              <button
+                onClick={() => setTracePackageId(null)}
+                className="ml-auto flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold text-ink-500 hover:bg-surfaceSunken transition-colors"
+              >
+                <X className="h-3 w-3" />
+                退出链路视图
+              </button>
+            )}
+            {!tracePackageId && viewMode === "archive" && (
               <span className="ml-auto text-[11px] text-ink-400">
                 档案长期留存证据与时间线，复核通过后仍可追溯
               </span>
             )}
           </div>
-          <IssueDetail issueId={selectedId} />
+          {tracePackageId ? (
+            <BatchTraceChain packageId={tracePackageId} onOpenIssue={(id) => { setSelectedId(id); setTracePackageId(null); }} />
+          ) : (
+            <IssueDetail issueId={selectedId} />
+          )}
         </div>
       </div>
     </div>

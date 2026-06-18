@@ -13,6 +13,7 @@ import type {
   TaskStatus,
   PhotoEvidence,
   PhotoEvidenceType,
+  ReportExportRecord,
 } from "@/types";
 import {
   stores as seedStores,
@@ -149,13 +150,14 @@ function buildInitialState() {
     issues: Issue[];
     problems: CommonProblem[];
     verifications: VerificationItem[];
+    reportExports: ReportExportRecord[];
     currentStoreId: string;
     activeTaskId: string | null;
     activePackageId: string | null;
   } | null>(STORAGE_KEY, null);
 
   if (stored) {
-    return stored;
+    return { reportExports: [], ...stored };
   }
 
   return {
@@ -166,6 +168,7 @@ function buildInitialState() {
     issues: seedIssues,
     problems: seedProblems,
     verifications: [],
+    reportExports: [] as ReportExportRecord[],
     currentStoreId: "ST01",
     activeTaskId: "TK-2026-014",
     activePackageId: null,
@@ -180,6 +183,7 @@ interface AuditState {
   issues: Issue[];
   problems: CommonProblem[];
   verifications: VerificationItem[];
+  reportExports: ReportExportRecord[];
   currentStoreId: string;
   activeTaskId: string | null;
   activePackageId: string | null;
@@ -213,6 +217,7 @@ interface AuditState {
   reviewIssue: (issueId: string, pass: boolean, note?: string, photoUrl?: string) => void;
   batchReviewIssues: (issueIds: string[], pass: boolean, note?: string) => void;
   sweepTaskStatuses: () => void;
+  recordReportExport: (data: { storeIds: string[]; issueIds: string[]; batchNos: string[]; totalIssues: number; overallRectifyRate: number }) => void;
 
   resetDemoData: () => void;
 }
@@ -405,27 +410,37 @@ export const useAuditStore = create<AuditState>((set, get) => {
     checkAndUpdateTaskStatus: (taskId) => {
       const task = get().tasks.find((t) => t.id === taskId);
       if (!task) return;
-      if (task.status === "done" || task.status === "todo") return;
-
-      const pkgs = get().packages.filter((p) => task.packageIds.includes(p.id));
-      if (pkgs.length === 0) return;
-
-      const allSubmitted = pkgs.every((p) => p.status !== "pending");
-      if (!allSubmitted) return;
+      if (task.status === "todo" || task.status === "done") return;
 
       const taskIssues = get().issues.filter((i) => i.taskId === taskId);
-      const hasUnclosedIssues = taskIssues.some((i) => i.status !== "closed");
+      const hasUnclosedIssues =
+        taskIssues.length > 0 && taskIssues.some((i) => i.status !== "closed");
 
-      const newStatus: TaskStatus = hasUnclosedIssues ? "review" : "done";
-      const justCompleted = newStatus === "done";
+      if (!hasUnclosedIssues) {
+        const resolvedDates = taskIssues
+          .map((i) => i.resolvedAt)
+          .filter((v): v is string => Boolean(v))
+          .sort();
+        const completedAt = task.completedAt || resolvedDates.pop() || TODAY;
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId
+              ? { ...t, status: "done" as TaskStatus, completedAt }
+              : t
+          ),
+        }));
+        return;
+      }
 
-      set((s) => ({
-        tasks: s.tasks.map((t) =>
-          t.id === taskId
-            ? { ...t, status: newStatus, completedAt: justCompleted ? TODAY : t.completedAt }
-            : t
-        ),
-      }));
+      const pkgs = get().packages.filter((p) => task.packageIds.includes(p.id));
+      const allSubmitted = pkgs.length === 0 || pkgs.every((p) => p.status !== "pending");
+      if (allSubmitted && task.status !== "review") {
+        set((s) => ({
+          tasks: s.tasks.map((t) =>
+            t.id === taskId ? { ...t, status: "review" as TaskStatus } : t
+          ),
+        }));
+      }
     },
 
     addIssueEvidence: (issueId, type, url, caption) => {
@@ -606,10 +621,36 @@ export const useAuditStore = create<AuditState>((set, get) => {
     },
 
     sweepTaskStatuses: () => {
-      const taskIds = get()
+      const activeTaskIds = get()
         .tasks.filter((t) => t.status !== "todo" && t.status !== "done")
         .map((t) => t.id);
-      taskIds.forEach((tid) => get().checkAndUpdateTaskStatus(tid));
+      activeTaskIds.forEach((tid) => get().checkAndUpdateTaskStatus(tid));
+
+      set((s) => ({
+        tasks: s.tasks.map((t) => {
+          if (t.status !== "done" || t.completedAt) return t;
+          const tIssues = s.issues.filter((i) => i.taskId === t.id);
+          const lastResolved = tIssues
+            .map((i) => i.resolvedAt)
+            .filter((v): v is string => Boolean(v))
+            .sort()
+            .pop();
+          return { ...t, completedAt: lastResolved || t.deadline };
+        }),
+      }));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    recordReportExport: ({ storeIds, issueIds, batchNos, totalIssues, overallRectifyRate }) => {
+      const record: ReportExportRecord = {
+        id: uid("RPT"),
+        exportedAt: TODAY,
+        storeIds,
+        issueIds,
+        batchNos,
+        summary: { totalIssues, overallRectifyRate },
+      };
+      set((s) => ({ reportExports: [record, ...s.reportExports].slice(0, 50) }));
       saveToStorage(STORAGE_KEY, get());
     },
 
@@ -621,10 +662,11 @@ export const useAuditStore = create<AuditState>((set, get) => {
         tasks: seedTasks,
         issues: seedIssues,
         problems: seedProblems,
-        verifications: [],
+        verifications: [] as VerificationItem[],
+        reportExports: [] as ReportExportRecord[],
         currentStoreId: "ST01",
         activeTaskId: "TK-2026-014",
-        activePackageId: null,
+        activePackageId: null as string | null,
       };
       set(freshState);
       saveToStorage(STORAGE_KEY, freshState);
