@@ -106,6 +106,7 @@ export interface InspectionTask {
   sampleSize: number;
   deadline: string;
   createdAt: string;
+  completedAt?: string;
   packageIds: string[];
 }
 

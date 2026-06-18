@@ -4,6 +4,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { StoreRanking } from "./stats/StoreRanking";
 import { ChartsPanel } from "./stats/ChartsPanel";
 import { ProblemLibrary } from "./stats/ProblemLibrary";
+import { ReviewEfficiencyPanel } from "./stats/ReviewEfficiencyPanel";
 import { ReportModal } from "./stats/ReportModal";
 import { useAuditStore } from "@/store/useAuditStore";
 import { completionRate, riskDistribution, isOverdue } from "@/lib/format";
@@ -57,6 +58,10 @@ export default function StatsPage() {
           <div className="xl:col-span-7 min-h-[420px]">
             <ChartsPanel />
           </div>
+        </div>
+
+        <div className="mb-5">
+          <ReviewEfficiencyPanel />
         </div>
 
         <div className="min-h-[360px]">

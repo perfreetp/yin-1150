@@ -3,7 +3,11 @@ import { useAuditStore } from "@/store/useAuditStore";
 import { RiskBadge, IssueStatusBadge } from "@/components/ui/Badge";
 import { formatDate, daysUntil, isOverdue, categoryLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { CalendarClock, MessageSquare, Check, RotateCcw, Clock, Package, Store as StoreIcon, Camera, Flag, Image as ImageIcon } from "lucide-react";
+import {
+  CalendarClock, MessageSquare, Check, RotateCcw, Clock, Package, Store as StoreIcon,
+  Camera, Flag, Image as ImageIcon, Thermometer, Gauge, Timer, ChefHat,
+  ListChecks, Tag, CheckCircle2, XCircle, FileText
+} from "lucide-react";
 import type { PhotoEvidence, PhotoEvidenceType } from "@/types";
 
 interface IssueDetailProps {
@@ -53,6 +57,7 @@ export function IssueDetail({ issueId }: IssueDetailProps) {
   const packages = useAuditStore((s) => s.packages);
   const stores = useAuditStore((s) => s.stores);
   const tasks = useAuditStore((s) => s.tasks);
+  const records = useAuditStore((s) => s.records);
   const setIssueDeadline = useAuditStore((s) => s.setIssueDeadline);
   const submitRectification = useAuditStore((s) => s.submitRectification);
   const reviewIssue = useAuditStore((s) => s.reviewIssue);
@@ -146,8 +151,70 @@ export function IssueDetail({ issueId }: IssueDetailProps) {
           )}
         </div>
 
-        {issue.evidence.length > 0 && (
+        {pkg && (
           <div className="panel p-4 mb-4 animate-fade-up" style={{ animationDelay: "90ms" }}>
+            <div className="label-mono mb-3 flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 text-brand-500" />
+              关联批次追溯信息
+              <span className="font-mono text-ink-400 font-normal ml-1">· {pkg.batchNo}</span>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="text-[11px] font-semibold text-ink-600 mb-2 flex items-center gap-1">
+                  <Thermometer className="h-3 w-3 text-ember-500" /> 灭菌参数
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <ParamTile icon={Thermometer} label="温度" value={`${records.find((r) => r.packageId === pkg.id)?.temperature ?? "—"}℃`} />
+                  <ParamTile icon={Gauge} label="压力" value={`${records.find((r) => r.packageId === pkg.id)?.pressure ?? "—"}kPa`} />
+                  <ParamTile icon={Timer} label="时长" value={`${records.find((r) => r.packageId === pkg.id)?.duration ?? "—"}min`} />
+                  <ParamTile
+                    icon={pkg.paramQualified ? CheckCircle2 : XCircle}
+                    label="参数达标"
+                    value={pkg.paramQualified ? "合格" : "不合格"}
+                    tone={pkg.paramQualified ? "text-safe" : "text-risk"}
+                  />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-ink-400 font-mono">
+                  <span>锅次：{pkg.cycleNo}</span>
+                  <span>灭菌器：{pkg.sterilizerId}</span>
+                  <span>操作员：{records.find((r) => r.packageId === pkg.id)?.operator || "—"}</span>
+                  <span>灭菌日期：{formatDate(pkg.sterilizedAt)}</span>
+                  <span>失效日期：{formatDate(pkg.expiresAt)}</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-line-faint">
+                <div className="text-[11px] font-semibold text-ink-600 mb-2 flex items-center gap-1">
+                  <ListChecks className="h-3 w-3 text-brand-500" /> 包内配置
+                  <span className="text-ink-400 font-normal">({pkg.configStandard.length}件)</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {pkg.configStandard.map((item, idx) => (
+                    <span key={idx} className="chip bg-surfaceSunken text-ink-600 border border-line text-[10px]">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-line-faint">
+                <div className="text-[11px] font-semibold text-ink-600 mb-2 flex items-center gap-1">
+                  <Tag className="h-3 w-3 text-ember-500" /> 外签信息
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <LabelCheck label="锅次号" ok={pkg.outerLabel.cycleNo} />
+                  <LabelCheck label="灭菌日期" ok={pkg.outerLabel.sterilizedDate} />
+                  <LabelCheck label="失效日期" ok={pkg.outerLabel.expiryDate} />
+                  <LabelCheck label="操作人签名" ok={pkg.outerLabel.operatorSign} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {issue.evidence.length > 0 && (
+          <div className="panel p-4 mb-4 animate-fade-up" style={{ animationDelay: "120ms" }}>
             <div className="flex items-center justify-between mb-3">
               <div className="label-mono flex items-center gap-1.5">
                 <ImageIcon className="h-3.5 w-3.5 text-ink-400" />
@@ -343,6 +410,34 @@ function InfoField({ icon: Icon, label, value, mono }: { icon: typeof Clock; lab
         <div className="label-mono">{label}</div>
         <div className={cn("text-xs font-semibold text-ink-700 truncate", mono && "font-mono")}>{value}</div>
       </div>
+    </div>
+  );
+}
+
+function ParamTile({ icon: Icon, label, value, tone }: { icon: typeof Thermometer; label: string; value: string; tone?: string }) {
+  return (
+    <div className="panel-sunken p-2">
+      <div className="flex items-center gap-1 mb-1">
+        <Icon className={cn("h-3 w-3", tone || "text-ink-400")} />
+        <span className="label-mono text-ink-400">{label}</span>
+      </div>
+      <div className={cn("font-display text-sm font-bold tabular-nums", tone || "text-ink-800")}>{value}</div>
+    </div>
+  );
+}
+
+function LabelCheck({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <div className={cn(
+      "flex items-center gap-1.5 px-2 py-1.5 rounded-md border",
+      ok ? "bg-safe/5 border-safe/20" : "bg-risk/5 border-risk/20"
+    )}>
+      {ok ? (
+        <CheckCircle2 className="h-3.5 w-3.5 text-safe shrink-0" />
+      ) : (
+        <XCircle className="h-3.5 w-3.5 text-risk shrink-0" />
+      )}
+      <span className={cn("text-[11px] font-medium", ok ? "text-safe" : "text-risk")}>{label}</span>
     </div>
   );
 }

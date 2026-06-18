@@ -3,7 +3,7 @@ import { useAuditStore } from "@/store/useAuditStore";
 import { Modal } from "@/components/ui/Modal";
 import { RiskBadge, IssueStatusBadge } from "@/components/ui/Badge";
 import { categoryLabel, formatDate } from "@/lib/format";
-import { FileText, Download, Calendar, Store as StoreIcon, TrendingUp, AlertTriangle, CheckCircle, Award, ListChecks, ArrowLeft, Image as ImageIcon, ChevronRight } from "lucide-react";
+import { FileText, Download, Calendar, Store as StoreIcon, TrendingUp, AlertTriangle, CheckCircle, Award, ListChecks, ArrowLeft, Image as ImageIcon, ChevronRight, Clock, RotateCcw, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Issue } from "@/types";
 
@@ -44,6 +44,19 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
       const rectifyRate = total > 0 ? Math.round((closed / total) * 100) : 100;
       const highRisk = storeIssues.filter((i) => i.riskLevel === "high").length;
       const evidenceCount = storeIssues.reduce((sum, i) => sum + i.evidence.length, 0);
+
+      const daysList = storeIssues
+        .filter((i) => i.resolvedAt)
+        .map((i) => Math.ceil((new Date(i.resolvedAt!).getTime() - new Date(i.createdAt).getTime()) / (1000 * 60 * 60 * 24)));
+      const avgRectifyDays = daysList.length > 0
+        ? Math.round(daysList.reduce((a, b) => a + b, 0) / daysList.length)
+        : 0;
+      const rejections = storeIssues.reduce(
+        (sum, i) => sum + i.timeline.filter((n) => n.node === "复核退回").length,
+        0
+      );
+      const backlog = storeIssues.filter((i) => i.status !== "closed").length;
+
       return {
         store,
         total,
@@ -51,9 +64,12 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         rectifyRate,
         highRisk,
         evidenceCount,
+        avgRectifyDays,
+        rejections,
+        backlog,
         issues: storeIssues,
       };
-    }).sort((a, b) => b.rectifyRate - a.rectifyRate || a.total - b.total);
+    }).sort((a, b) => b.rectifyRate - a.rectifyRate || a.avgRectifyDays - b.avgRectifyDays);
   }, [filteredIssues, selectedStoreIds, stores]);
 
   const categoryStats = useMemo(() => {
@@ -69,6 +85,20 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
   const totalIssues = filteredIssues.length;
   const totalClosed = filteredIssues.filter((i) => i.status === "closed").length;
   const overallRate = totalIssues > 0 ? Math.round((totalClosed / totalIssues) * 100) : 100;
+
+  const avgRectifyDays = useMemo(() => {
+    const days = filteredIssues
+      .filter((i) => i.resolvedAt)
+      .map((i) => Math.ceil((new Date(i.resolvedAt!).getTime() - new Date(i.createdAt).getTime()) / (1000 * 60 * 60 * 24)));
+    return days.length > 0 ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0;
+  }, [filteredIssues]);
+
+  const totalRejections = useMemo(
+    () => filteredIssues.reduce((sum, i) => sum + i.timeline.filter((n) => n.node === "复核退回").length, 0),
+    [filteredIssues]
+  );
+
+  const totalBacklog = filteredIssues.filter((i) => i.status !== "closed").length;
 
   const toggleStore = (id: string) => {
     setSelectedStoreIds((prev) =>
@@ -88,6 +118,9 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         totalOpen: totalIssues - totalClosed,
         overallRectifyRate: overallRate,
         totalEvidence: filteredIssues.reduce((sum, i) => sum + i.evidence.length, 0),
+        avgRectifyDays,
+        totalRejections,
+        totalBacklog,
       },
       storeRanking: storeStats.map((s, idx) => ({
         rank: idx + 1,
@@ -99,6 +132,9 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         rectifyRate: s.rectifyRate,
         highRisk: s.highRisk,
         evidenceCount: s.evidenceCount,
+        avgRectifyDays: s.avgRectifyDays,
+        rejections: s.rejections,
+        backlog: s.backlog,
         closureStatus: s.rectifyRate === 100 ? "全部闭环" : s.rectifyRate >= 70 ? "大部分闭环" : "整改中",
         issueList: s.issues.map((i) => ({
           id: i.id,
@@ -240,11 +276,13 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         </div>
       ) : step === "preview" ? (
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
             <StatMini icon={ListChecks} label="问题总数" value={String(totalIssues)} color="text-ink-700" />
             <StatMini icon={CheckCircle} label="已闭环" value={String(totalClosed)} color="text-safe" />
             <StatMini icon={TrendingUp} label="整体整改率" value={`${overallRate}%`} color="text-brand-600" />
-            <StatMini icon={AlertTriangle} label="高风险" value={String(filteredIssues.filter((i) => i.riskLevel === "high").length)} color="text-risk" />
+            <StatMini icon={Clock} label="平均整改用时" value={`${avgRectifyDays}天`} color="text-brand-600" />
+            <StatMini icon={Eye} label="待办积压" value={String(totalBacklog)} color="text-ember-600" />
+            <StatMini icon={RotateCcw} label="累计退回" value={`${totalRejections}次`} color="text-caution" />
           </div>
 
           <div className="panel p-4">
@@ -270,27 +308,22 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
                     {idx + 1}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-semibold text-ink-800 truncate">{s.store.name.replace("雅悦口腔·", "")}</span>
-                      <span className="font-mono text-xs text-ink-500">
-                        {s.total}个问题 · 高风险{s.highRisk}
-                        {s.evidenceCount > 0 && (
-                          <span className="ml-2 text-ink-400">
-                            <ImageIcon className="inline h-2.5 w-2.5" /> {s.evidenceCount}
-                          </span>
-                        )}
-                      </span>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold text-ink-800 truncate">{s.store.name.replace("雅悦口腔·", "")}</span>
+                        <span className="font-mono text-[11px] text-ink-500">
+                          {s.total}问题 · 高风险{s.highRisk} · 平均{s.avgRectifyDays || "—"}天 · 退回{s.rejections}次
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-surfaceSunken rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            s.rectifyRate >= 90 ? "bg-safe" : s.rectifyRate >= 70 ? "bg-brand-500" : "bg-caution"
+                          )}
+                          style={{ width: `${s.rectifyRate}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1.5 bg-surfaceSunken rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          s.rectifyRate >= 90 ? "bg-safe" : s.rectifyRate >= 70 ? "bg-brand-500" : "bg-caution"
-                        )}
-                        style={{ width: `${s.rectifyRate}%` }}
-                      />
-                    </div>
-                  </div>
                   <span className={cn(
                     "font-display font-bold text-lg tabular-nums w-14 text-right shrink-0",
                     s.rectifyRate >= 90 ? "text-safe" : s.rectifyRate >= 70 ? "text-brand-600" : "text-caution"
@@ -334,10 +367,12 @@ export function ReportModal({ open, onClose }: ReportModalProps) {
         </div>
       ) : detailStore ? (
         <div className="max-h-[60vh] overflow-y-auto pr-1 space-y-4">
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
             <StatMini icon={ListChecks} label="问题总数" value={String(detailStore.total)} color="text-ink-700" />
             <StatMini icon={CheckCircle} label="已闭环" value={String(detailStore.closed)} color="text-safe" />
             <StatMini icon={TrendingUp} label="整改率" value={`${detailStore.rectifyRate}%`} color="text-brand-600" />
+            <StatMini icon={Clock} label="平均整改用时" value={`${detailStore.avgRectifyDays || 0}天`} color="text-brand-600" />
+            <StatMini icon={RotateCcw} label="退回次数" value={`${detailStore.rejections}次`} color="text-caution" />
             <StatMini icon={ImageIcon} label="证据照片" value={String(detailStore.evidenceCount)} color="text-ember-600" />
           </div>
 

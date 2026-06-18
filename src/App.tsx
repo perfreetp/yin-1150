@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -6,6 +7,7 @@ import TasksPage from "@/pages/TasksPage";
 import VerifyPage from "@/pages/VerifyPage";
 import RectifyPage from "@/pages/RectifyPage";
 import StatsPage from "@/pages/StatsPage";
+import { useAuditStore } from "@/store/useAuditStore";
 
 function AppShell() {
   return (
@@ -23,6 +25,12 @@ function AppShell() {
 }
 
 export default function App() {
+  const sweepTaskStatuses = useAuditStore((s) => s.sweepTaskStatuses);
+
+  useEffect(() => {
+    sweepTaskStatuses();
+  }, [sweepTaskStatuses]);
+
   return (
     <Router>
       <Routes>

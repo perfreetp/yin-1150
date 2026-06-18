@@ -212,6 +212,7 @@ interface AuditState {
   submitRectification: (issueId: string, note: string, photos?: { beforeUrl?: string; afterUrl?: string }) => void;
   reviewIssue: (issueId: string, pass: boolean, note?: string, photoUrl?: string) => void;
   batchReviewIssues: (issueIds: string[], pass: boolean, note?: string) => void;
+  sweepTaskStatuses: () => void;
 
   resetDemoData: () => void;
 }
@@ -416,9 +417,14 @@ export const useAuditStore = create<AuditState>((set, get) => {
       const hasUnclosedIssues = taskIssues.some((i) => i.status !== "closed");
 
       const newStatus: TaskStatus = hasUnclosedIssues ? "review" : "done";
+      const justCompleted = newStatus === "done";
 
       set((s) => ({
-        tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)),
+        tasks: s.tasks.map((t) =>
+          t.id === taskId
+            ? { ...t, status: newStatus, completedAt: justCompleted ? TODAY : t.completedAt }
+            : t
+        ),
       }));
     },
 
@@ -596,6 +602,14 @@ export const useAuditStore = create<AuditState>((set, get) => {
       }));
 
       affectedTaskIds.forEach((tid) => get().checkAndUpdateTaskStatus(tid));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    sweepTaskStatuses: () => {
+      const taskIds = get()
+        .tasks.filter((t) => t.status !== "todo" && t.status !== "done")
+        .map((t) => t.id);
+      taskIds.forEach((tid) => get().checkAndUpdateTaskStatus(tid));
       saveToStorage(STORAGE_KEY, get());
     },
 
