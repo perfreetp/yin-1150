@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Manrope", system-ui, sans-serif;
+  line-height: 1.55;
+  font-weight: 400;
+  color: #0B151A;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #F2F4F6;
+  background-image: radial-gradient(circle, rgba(11, 21, 26, 0.04) 1px, transparent 1px);
+  background-size: 16px 16px;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD3DC;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  background-clip: content-box;
+}
+
+@layer components {
+  .panel {
+    @apply bg-surface border border-line rounded-lg shadow-panel;
+  }
+  .panel-sunken {
+    @apply bg-surfaceSunken border border-line rounded-md;
+  }
+  .label-mono {
+    @apply font-mono text-[11px] tracking-wide uppercase text-ink-400;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-xs px-2 py-0.5 text-[11px] font-semibold font-mono tracking-wide;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3.5 py-2 text-sm font-semibold transition-all duration-150 select-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700 shadow-sm;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink-700 hover:bg-surfaceSunken border border-line;
+  }
+  .btn-subtle {
+    @apply btn bg-surfaceAlt text-ink-700 hover:bg-surfaceSunken border border-line;
+  }
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150 cursor-pointer;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
