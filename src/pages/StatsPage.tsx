@@ -1,15 +1,18 @@
+import { useState } from "react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { StoreRanking } from "./stats/StoreRanking";
 import { ChartsPanel } from "./stats/ChartsPanel";
 import { ProblemLibrary } from "./stats/ProblemLibrary";
+import { ReportModal } from "./stats/ReportModal";
 import { useAuditStore } from "@/store/useAuditStore";
 import { completionRate, riskDistribution, isOverdue } from "@/lib/format";
-import { FileWarning, CheckCircle2, AlertCircle, ShieldAlert } from "lucide-react";
+import { FileWarning, CheckCircle2, AlertCircle, ShieldAlert, FileDown } from "lucide-react";
 
 export default function StatsPage() {
   const issues = useAuditStore((s) => s.issues);
   const stores = useAuditStore((s) => s.stores);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const dist = riskDistribution(issues);
   const rate = completionRate(issues);
@@ -25,9 +28,17 @@ export default function StatsPage() {
           title="门店排名与质量洞察"
           description="沉淀稽核数据，输出门店排名、整改完成率与常见问题库，驱动下一轮抽查。"
           actions={
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surfaceAlt border border-line">
-              <span className="h-2 w-2 rounded-full bg-brand-500" />
-              <span className="font-mono text-[11px] text-ink-600">覆盖 {stores.length} 家门店</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setReportOpen(true)}
+                className="btn-primary text-xs"
+              >
+                <FileDown className="h-3.5 w-3.5" /> 门店稽核报告
+              </button>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-surfaceAlt border border-line">
+                <span className="h-2 w-2 rounded-full bg-brand-500" />
+                <span className="font-mono text-[11px] text-ink-600">覆盖 {stores.length} 家门店</span>
+              </div>
             </div>
           }
         />
@@ -52,6 +63,7 @@ export default function StatsPage() {
           <ProblemLibrary />
         </div>
       </div>
+      <ReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
     </div>
   );
 }

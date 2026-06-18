@@ -308,9 +308,14 @@ export const issues: Issue[] = [
     createdAt: "2026-06-12",
     resolvedAt: "2026-06-16",
     rectifyNote: "已补签并重新灭菌，操作人培训完成。",
+    evidence: [
+      { id: "E-031-1", type: "inspection", url: "photo_inspect_sign_001", caption: "缺签名外标识照片", at: "2026-06-12", actor: "督导·吴桐" },
+      { id: "E-031-2", type: "rectify_before", url: "photo_before_001", caption: "整改前：未签名包外标识", at: "2026-06-12", actor: "督导·吴桐" },
+      { id: "E-031-3", type: "rectify_after", url: "photo_after_001", caption: "整改后：补签后重新灭菌", at: "2026-06-16", actor: "陈浩" },
+    ],
     timeline: [
-      ...baseTimeline("2026-06-12", "督导·吴桐"),
-      { node: "整改提交", at: "2026-06-16", actor: "陈浩", note: "补签+培训记录" },
+      { node: "问题发现", at: "2026-06-12", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-031-1", "E-031-2"] },
+      { node: "整改提交", at: "2026-06-16", actor: "陈浩", note: "补签+培训记录", photoIds: ["E-031-3"] },
       { node: "待复核", at: "2026-06-16", actor: "系统" },
     ],
   },
@@ -327,8 +332,11 @@ export const issues: Issue[] = [
     deadline: "2026-06-21",
     assignee: "陈浩",
     createdAt: "2026-06-12",
+    evidence: [
+      { id: "E-030-1", type: "inspection", url: "photo_inspect_implant_001", caption: "种植包外标识缺签名", at: "2026-06-12", actor: "督导·吴桐" },
+    ],
     timeline: [
-      ...baseTimeline("2026-06-12", "督导·吴桐"),
+      { node: "问题发现", at: "2026-06-12", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-030-1"] },
       { node: "整改中", at: "2026-06-14", actor: "陈浩", note: "正在补签整改" },
     ],
   },
@@ -347,9 +355,13 @@ export const issues: Issue[] = [
     createdAt: "2026-06-12",
     resolvedAt: "2026-06-15",
     rectifyNote: "已归位至无菌区A柜，分区标识重新张贴。",
+    evidence: [
+      { id: "E-029-1", type: "inspection", url: "photo_storage_wrong", caption: "错位存放现场照片", at: "2026-06-12", actor: "督导·吴桐" },
+      { id: "E-029-2", type: "rectify_after", url: "photo_storage_fixed", caption: "归位后的无菌区A柜", at: "2026-06-15", actor: "陈浩" },
+    ],
     timeline: [
-      ...baseTimeline("2026-06-12", "督导·吴桐"),
-      { node: "整改提交", at: "2026-06-15", actor: "陈浩" },
+      { node: "问题发现", at: "2026-06-12", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-029-1"] },
+      { node: "整改提交", at: "2026-06-15", actor: "陈浩", photoIds: ["E-029-2"] },
       { node: "复核通过", at: "2026-06-15", actor: "院感·徐颖" },
       { node: "关闭", at: "2026-06-15", actor: "系统" },
     ],
@@ -367,7 +379,12 @@ export const issues: Issue[] = [
     deadline: "2026-06-24",
     assignee: "陈浩",
     createdAt: "2026-06-13",
-    timeline: baseTimeline("2026-06-13", "督导·吴桐"),
+    evidence: [
+      { id: "E-028-1", type: "inspection", url: "photo_label_incomplete", caption: "缺失失效日期标注", at: "2026-06-13", actor: "督导·吴桐" },
+    ],
+    timeline: [
+      { node: "问题发现", at: "2026-06-13", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-028-1"] },
+    ],
   },
   {
     id: "IS-2026-027",
@@ -384,9 +401,13 @@ export const issues: Issue[] = [
     createdAt: "2026-06-03",
     resolvedAt: "2026-06-07",
     rectifyNote: "已补充探针并重新打包灭菌。",
+    evidence: [
+      { id: "E-027-1", type: "inspection", url: "photo_config_missing", caption: "缺少探针的器械包", at: "2026-06-03", actor: "督导·林川" },
+      { id: "E-027-2", type: "rectify_after", url: "photo_config_fixed", caption: "补充探针后重新打包", at: "2026-06-07", actor: "李婷" },
+    ],
     timeline: [
-      ...baseTimeline("2026-06-03", "督导·林川"),
-      { node: "整改提交", at: "2026-06-07", actor: "李婷" },
+      { node: "问题发现", at: "2026-06-03", actor: "督导·林川", note: "现场核验自动判定", photoIds: ["E-027-1"] },
+      { node: "整改提交", at: "2026-06-07", actor: "李婷", photoIds: ["E-027-2"] },
       { node: "复核通过", at: "2026-06-08", actor: "院感·徐颖" },
       { node: "关闭", at: "2026-06-08", actor: "系统" },
     ],
@@ -406,8 +427,11 @@ export const issues: Issue[] = [
     createdAt: "2026-06-03",
     resolvedAt: "2026-06-06",
     rectifyNote: "已销毁超期包并完善效期巡检流程。",
+    evidence: [
+      { id: "E-026-1", type: "inspection", url: "photo_expired_package", caption: "超期根管器械包", at: "2026-06-03", actor: "督导·林川" },
+    ],
     timeline: [
-      ...baseTimeline("2026-06-03", "督导·林川"),
+      { node: "问题发现", at: "2026-06-03", actor: "督导·林川", note: "现场核验自动判定", photoIds: ["E-026-1"] },
       { node: "整改提交", at: "2026-06-06", actor: "李婷" },
       { node: "复核通过", at: "2026-06-06", actor: "院感·徐颖" },
       { node: "关闭", at: "2026-06-06", actor: "系统" },
@@ -426,7 +450,12 @@ export const issues: Issue[] = [
     deadline: "2026-06-22",
     assignee: "周敏",
     createdAt: "2026-06-15",
-    timeline: baseTimeline("2026-06-15", "督导·吴桐"),
+    evidence: [
+      { id: "E-025-1", type: "inspection", url: "photo_implant_nosign", caption: "种植包外标识缺签名", at: "2026-06-15", actor: "督导·吴桐" },
+    ],
+    timeline: [
+      { node: "问题发现", at: "2026-06-15", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-025-1"] },
+    ],
   },
   {
     id: "IS-2026-024",
@@ -441,8 +470,11 @@ export const issues: Issue[] = [
     deadline: "2026-06-21",
     assignee: "周敏",
     createdAt: "2026-06-15",
+    evidence: [
+      { id: "E-024-1", type: "inspection", url: "photo_restore_wrongpos", caption: "错位存放于清洁区", at: "2026-06-15", actor: "督导·吴桐" },
+    ],
     timeline: [
-      ...baseTimeline("2026-06-15", "督导·吴桐"),
+      { node: "问题发现", at: "2026-06-15", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-024-1"] },
       { node: "整改中", at: "2026-06-16", actor: "周敏" },
     ],
   },
@@ -459,7 +491,12 @@ export const issues: Issue[] = [
     deadline: "2026-06-23",
     assignee: "周敏",
     createdAt: "2026-06-15",
-    timeline: baseTimeline("2026-06-15", "督导·吴桐"),
+    evidence: [
+      { id: "E-023-1", type: "inspection", url: "photo_scaling_missing", caption: "洁治包缺少吸唾管", at: "2026-06-15", actor: "督导·吴桐" },
+    ],
+    timeline: [
+      { node: "问题发现", at: "2026-06-15", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-023-1"] },
+    ],
   },
   {
     id: "IS-2026-022",
@@ -474,16 +511,21 @@ export const issues: Issue[] = [
     deadline: "2026-06-19",
     assignee: "周敏",
     createdAt: "2026-06-15",
-    timeline: baseTimeline("2026-06-15", "督导·吴桐"),
+    evidence: [
+      { id: "E-022-1", type: "inspection", url: "photo_endo_expired", caption: "超期根管器械包", at: "2026-06-15", actor: "督导·吴桐" },
+    ],
+    timeline: [
+      { node: "问题发现", at: "2026-06-15", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-022-1"] },
+    ],
   },
   {
     id: "IS-2026-021",
     taskId: "TK-2026-010",
-    packageId: "",
+    packageId: "PK-ST01-EXTRACT-001",
     storeId: "ST01",
     category: "signature",
     type: "缺操作人签名",
-    description: "5月静安门诊抽查发现2批次缺签名。",
+    description: "5月静安门诊抽查发现拔牙包缺签名问题。",
     riskLevel: "high",
     status: "closed",
     deadline: "2026-05-30",
@@ -491,9 +533,13 @@ export const issues: Issue[] = [
     createdAt: "2026-05-19",
     resolvedAt: "2026-05-26",
     rectifyNote: "签名流程已纳入晨会培训。",
+    evidence: [
+      { id: "E-021-1", type: "inspection", url: "photo_may_sign_issue", caption: "5月抽查发现缺签名", at: "2026-05-19", actor: "督导·吴桐" },
+      { id: "E-021-2", type: "rectify_after", url: "photo_may_sign_fixed", caption: "整改后培训记录", at: "2026-05-26", actor: "周敏" },
+    ],
     timeline: [
-      ...baseTimeline("2026-05-19", "督导·吴桐"),
-      { node: "整改提交", at: "2026-05-26", actor: "周敏" },
+      { node: "问题发现", at: "2026-05-19", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-021-1"] },
+      { node: "整改提交", at: "2026-05-26", actor: "周敏", photoIds: ["E-021-2"] },
       { node: "复核通过", at: "2026-05-27", actor: "院感·徐颖" },
       { node: "关闭", at: "2026-05-27", actor: "系统" },
     ],
@@ -501,11 +547,11 @@ export const issues: Issue[] = [
   {
     id: "IS-2026-020",
     taskId: "TK-2026-011",
-    packageId: "",
+    packageId: "PK-ST04-SCALING-004",
     storeId: "ST04",
     category: "expiry",
     type: "器械包超期",
-    description: "5月广州天河发现1批次超期未下架。",
+    description: "5月广州天河发现洁治包超期未下架。",
     riskLevel: "high",
     status: "closed",
     deadline: "2026-05-31",
@@ -513,8 +559,11 @@ export const issues: Issue[] = [
     createdAt: "2026-05-20",
     resolvedAt: "2026-05-28",
     rectifyNote: "效期巡检纳入每日交接班制度。",
+    evidence: [
+      { id: "E-020-1", type: "inspection", url: "photo_may_expiry_issue", caption: "5月抽查发现超期包", at: "2026-05-20", actor: "督导·吴桐" },
+    ],
     timeline: [
-      ...baseTimeline("2026-05-20", "督导·吴桐"),
+      { node: "问题发现", at: "2026-05-20", actor: "督导·吴桐", note: "现场核验自动判定", photoIds: ["E-020-1"] },
       { node: "整改提交", at: "2026-05-28", actor: "黄磊" },
       { node: "复核通过", at: "2026-05-29", actor: "院感·徐颖" },
       { node: "关闭", at: "2026-05-29", actor: "系统" },

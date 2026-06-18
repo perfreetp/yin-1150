@@ -15,6 +15,8 @@ export function PlanGenerator() {
   const stores = useAuditStore((s) => s.stores);
   const packages = useAuditStore((s) => s.packages);
   const generateTask = useAuditStore((s) => s.generateTask);
+  const setActiveTask = useAuditStore((s) => s.setActiveTask);
+  const startTask = useAuditStore((s) => s.startTask);
   const navigate = useNavigate();
 
   const [storeId, setStoreId] = useState("ST01");
@@ -194,7 +196,14 @@ export function PlanGenerator() {
         footer={
           <>
             <button className="btn-ghost" onClick={() => setPreview(null)}>留在此页</button>
-            <button className="btn-primary" onClick={() => { setPreview(null); navigate("/verify"); }}>
+            <button className="btn-primary" onClick={() => { 
+              if (createdId) {
+                startTask(createdId);
+                setActiveTask(createdId);
+              }
+              setPreview(null); 
+              navigate("/verify"); 
+            }}>
               <Check className="h-4 w-4" /> 前往现场核验
             </button>
           </>

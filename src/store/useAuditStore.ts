@@ -11,6 +11,8 @@ import type {
   RiskLevel,
   IssueStatus,
   TaskStatus,
+  PhotoEvidence,
+  PhotoEvidenceType,
 } from "@/types";
 import {
   stores as seedStores,
@@ -21,6 +23,11 @@ import {
   commonProblems as seedProblems,
   standards,
 } from "@/data/seed";
+
+const STORAGE_KEY = "audit-demo-data-v1";
+const TODAY = "2026-06-18";
+const ACTOR_INSPECTOR = "督导·吴桐";
+const ACTOR_REVIEWER = "院感·徐颖";
 
 function pickRisk(category: CheckCategory, type: string): RiskLevel {
   if (category === "signature" && type.includes("签名")) return "high";
@@ -34,8 +41,7 @@ function pickRisk(category: CheckCategory, type: string): RiskLevel {
 function buildItemsForPackage(pkg: InstrumentPackage): VerificationItem[] {
   const std = standards.find((s) => s.type === pkg.packageType)!;
   const items: VerificationItem[] = [];
-  const now = "2026-06-18";
-  const expired = new Date(pkg.expiresAt) < new Date(now);
+  const expired = new Date(pkg.expiresAt) < new Date(TODAY);
   const paramOk = pkg.paramQualified;
 
   items.push({
@@ -91,7 +97,8 @@ function buildItemsForPackage(pkg: InstrumentPackage): VerificationItem[] {
 }
 
 function failToType(item: VerificationItem, pkg: InstrumentPackage): { type: string; description: string } {
-  switch (item.id.split("-").pop()) {
+  const key = item.id.split("-").pop();
+  switch (key) {
     case "config":
       return { type: "包内配置缺件", description: `${pkg.packageName}包内配置缺件，与标准清单不一致。` };
     case "sign":
@@ -107,6 +114,62 @@ function failToType(item: VerificationItem, pkg: InstrumentPackage): { type: str
     default:
       return { type: "其他问题", description: "核验发现异常。" };
   }
+}
+
+function uid(prefix: string) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function loadFromStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveToStorage(key: string, value: unknown) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+}
+
+function buildInitialState() {
+  const stored = loadFromStorage<{
+    stores: Store[];
+    packages: InstrumentPackage[];
+    records: SterilizationRecord[];
+    tasks: InspectionTask[];
+    issues: Issue[];
+    problems: CommonProblem[];
+    verifications: VerificationItem[];
+    currentStoreId: string;
+    activeTaskId: string | null;
+    activePackageId: string | null;
+  } | null>(STORAGE_KEY, null);
+
+  if (stored) {
+    return stored;
+  }
+
+  return {
+    stores: seedStores,
+    packages: seedPackages,
+    records: seedRecords,
+    tasks: seedTasks,
+    issues: seedIssues,
+    problems: seedProblems,
+    verifications: [],
+    currentStoreId: "ST01",
+    activeTaskId: "TK-2026-014",
+    activePackageId: null,
+  };
 }
 
 interface AuditState {
@@ -142,10 +205,14 @@ interface AuditState {
   toggleItemResult: (itemId: string) => void;
 
   submitPackageVerification: (packageId: string, taskId: string) => void;
+  checkAndUpdateTaskStatus: (taskId: string) => void;
 
+  addIssueEvidence: (issueId: string, type: PhotoEvidenceType, url: string, caption?: string) => void;
   setIssueDeadline: (issueId: string, deadline: string) => void;
-  submitRectification: (issueId: string, note: string) => void;
-  reviewIssue: (issueId: string, pass: boolean) => void;
+  submitRectification: (issueId: string, note: string, photos?: { beforeUrl?: string; afterUrl?: string }) => void;
+  reviewIssue: (issueId: string, pass: boolean, note?: string, photoUrl?: string) => void;
+
+  resetDemoData: () => void;
 }
 
 function mulberry32(seed: number) {
@@ -158,181 +225,347 @@ function mulberry32(seed: number) {
   };
 }
 
-export const useAuditStore = create<AuditState>((set, get) => ({
-  stores: seedStores,
-  packages: seedPackages,
-  records: seedRecords,
-  tasks: seedTasks,
-  issues: seedIssues,
-  problems: seedProblems,
-  verifications: [],
-  currentStoreId: "ST01",
-  activeTaskId: "TK-2026-014",
-  activePackageId: null,
+export const useAuditStore = create<AuditState>((set, get) => {
+  const initial = buildInitialState();
 
-  setCurrentStore: (id) => set({ currentStoreId: id }),
-  setActiveTask: (id) => set({ activeTaskId: id }),
-  setActivePackage: (id) => set({ activePackageId: id }),
+  return {
+    ...initial,
 
-  generateTask: ({ storeId, planName, type, ratio, inspector, deadline }) => {
-    const storePackages = get().packages.filter((p) => p.storeId === storeId);
-    const sampleSize = Math.max(1, Math.round(storePackages.length * ratio));
-    const seedNum = planName.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-    const rng = mulberry32(seedNum);
-    const pool = [...storePackages];
-    const picked: InstrumentPackage[] = [];
-    while (picked.length < sampleSize && pool.length > 0) {
-      const idx = Math.floor(rng() * pool.length);
-      picked.push(pool.splice(idx, 1)[0]);
-    }
-    const taskId = `TK-2026-${String(17 + get().tasks.length).padStart(3, "0")}`;
-    const task: InspectionTask = {
-      id: taskId,
-      storeId,
-      planName,
-      type,
-      status: "todo",
-      inspector,
-      sampleSize,
-      deadline,
-      createdAt: "2026-06-18",
-      packageIds: picked.map((p) => p.id),
-    };
-    set((s) => ({ tasks: [task, ...s.tasks] }));
-    return taskId;
-  },
+    setCurrentStore: (id) => {
+      set({ currentStoreId: id });
+      saveToStorage(STORAGE_KEY, get());
+    },
+    setActiveTask: (id) => {
+      set({ activeTaskId: id });
+      saveToStorage(STORAGE_KEY, get());
+    },
+    setActivePackage: (id) => {
+      set({ activePackageId: id });
+      saveToStorage(STORAGE_KEY, get());
+    },
 
-  startTask: (taskId) => {
-    set((s) => ({
-      tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, status: "doing" as TaskStatus } : t)),
-      activeTaskId: taskId,
-    }));
-    get().ensureVerifications(taskId);
-  },
-
-  ensureVerifications: (taskId) => {
-    const task = get().tasks.find((t) => t.id === taskId);
-    if (!task) return;
-    const existing = get().verifications.filter((v) => v.taskId === taskId);
-    const existingPkgIds = new Set(existing.map((v) => v.packageId));
-    const newItems: VerificationItem[] = [];
-    task.packageIds.forEach((pid) => {
-      if (existingPkgIds.has(pid)) return;
-      const pkg = get().packages.find((p) => p.id === pid);
-      if (!pkg) return;
-      const items = buildItemsForPackage(pkg).map((it) => ({ ...it, taskId }));
-      newItems.push(...items);
-    });
-    if (newItems.length > 0) {
-      set((s) => ({ verifications: [...s.verifications, ...newItems] }));
-    }
-  },
-
-  setItemResult: (itemId, result) =>
-    set((s) => ({
-      verifications: s.verifications.map((v) => (v.id === itemId ? { ...v, result } : v)),
-    })),
-
-  setItemPhoto: (itemId, photo) =>
-    set((s) => ({
-      verifications: s.verifications.map((v) => (v.id === itemId ? { ...v, photoUrl: photo } : v)),
-    })),
-
-  toggleItemResult: (itemId) =>
-    set((s) => ({
-      verifications: s.verifications.map((v) =>
-        v.id === itemId
-          ? { ...v, result: v.result === "fail" ? "pass" : "fail" }
-          : v
-      ),
-    })),
-
-  submitPackageVerification: (packageId, taskId) => {
-    const items = get().verifications.filter(
-      (v) => v.packageId === packageId && v.taskId === taskId
-    );
-    const pkg = get().packages.find((p) => p.id === packageId);
-    if (!pkg) return;
-    const fails = items.filter((v) => v.result === "fail");
-    if (fails.length === 0) {
-      set((s) => ({
-        packages: s.packages.map((p) => (p.id === packageId ? { ...p, status: "verified" } : p)),
-      }));
-      return;
-    }
-    const newIssues: Issue[] = fails.map((f, i) => {
-      const { type, description } = failToType(f, pkg);
-      const risk = pickRisk(f.category, type);
-      return {
-        id: `IS-2026-${String(32 + get().issues.length + i).padStart(3, "0")}`,
-        taskId,
-        packageId,
-        storeId: pkg.storeId,
-        category: f.category,
+    generateTask: ({ storeId, planName, type, ratio, inspector, deadline }) => {
+      const storePackages = get().packages.filter((p) => p.storeId === storeId);
+      const sampleSize = Math.max(1, Math.round(storePackages.length * ratio));
+      const seedNum = planName.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+      const rng = mulberry32(seedNum);
+      const pool = [...storePackages];
+      const picked: InstrumentPackage[] = [];
+      while (picked.length < sampleSize && pool.length > 0) {
+        const idx = Math.floor(rng() * pool.length);
+        picked.push(pool.splice(idx, 1)[0]);
+      }
+      const taskId = `TK-2026-${String(17 + get().tasks.length).padStart(3, "0")}`;
+      const task: InspectionTask = {
+        id: taskId,
+        storeId,
+        planName,
         type,
-        description,
-        riskLevel: risk,
-        status: "open",
-        deadline: "2026-06-25",
-        assignee: get().stores.find((st) => st.id === pkg.storeId)?.manager || "",
-        createdAt: "2026-06-18",
-        timeline: [
-          { node: "问题发现", at: "2026-06-18", actor: "督导·吴桐", note: "现场核验自动判定" },
-        ],
+        status: "todo",
+        inspector,
+        sampleSize,
+        deadline,
+        createdAt: TODAY,
+        packageIds: picked.map((p) => p.id),
       };
-    });
-    set((s) => ({
-      issues: [...newIssues, ...s.issues],
-      packages: s.packages.map((p) => (p.id === packageId ? { ...p, status: "issue" } : p)),
-    }));
-  },
+      set((s) => ({ tasks: [task, ...s.tasks], activeTaskId: taskId }));
+      saveToStorage(STORAGE_KEY, get());
+      return taskId;
+    },
 
-  setIssueDeadline: (issueId, deadline) =>
-    set((s) => ({
-      issues: s.issues.map((i) => (i.id === issueId ? { ...i, deadline } : i)),
-    })),
+    startTask: (taskId) => {
+      set((s) => ({
+        tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, status: "doing" as TaskStatus } : t)),
+        activeTaskId: taskId,
+      }));
+      get().ensureVerifications(taskId);
+      saveToStorage(STORAGE_KEY, get());
+    },
 
-  submitRectification: (issueId, note) =>
-    set((s) => ({
-      issues: s.issues.map((i) =>
-        i.id === issueId
-          ? {
-              ...i,
-              status: "review" as IssueStatus,
-              rectifyNote: note,
-              timeline: [
-                ...i.timeline,
-                { node: "整改提交", at: "2026-06-18", actor: i.assignee, note },
-              ],
-            }
-          : i
-      ),
-    })),
+    ensureVerifications: (taskId) => {
+      const task = get().tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      const existing = get().verifications.filter((v) => v.taskId === taskId);
+      const existingPkgIds = new Set(existing.map((v) => v.packageId));
+      const newItems: VerificationItem[] = [];
+      task.packageIds.forEach((pid) => {
+        if (existingPkgIds.has(pid)) return;
+        const pkg = get().packages.find((p) => p.id === pid);
+        if (!pkg) return;
+        const items = buildItemsForPackage(pkg).map((it) => ({ ...it, taskId }));
+        newItems.push(...items);
+      });
+      if (newItems.length > 0) {
+        set((s) => ({ verifications: [...s.verifications, ...newItems] }));
+        saveToStorage(STORAGE_KEY, get());
+      }
+    },
 
-  reviewIssue: (issueId, pass) =>
-    set((s) => ({
-      issues: s.issues.map((i) => {
-        if (i.id !== issueId) return i;
-        if (pass) {
+    setItemResult: (itemId, result) => {
+      set((s) => ({
+        verifications: s.verifications.map((v) => (v.id === itemId ? { ...v, result } : v)),
+      }));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    setItemPhoto: (itemId, photo) => {
+      set((s) => ({
+        verifications: s.verifications.map((v) => (v.id === itemId ? { ...v, photoUrl: photo } : v)),
+      }));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    toggleItemResult: (itemId) => {
+      set((s) => ({
+        verifications: s.verifications.map((v) =>
+          v.id === itemId
+            ? { ...v, result: v.result === "fail" ? "pass" : "fail" }
+            : v
+        ),
+      }));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    submitPackageVerification: (packageId, taskId) => {
+      const items = get().verifications.filter(
+        (v) => v.packageId === packageId && v.taskId === taskId
+      );
+      const pkg = get().packages.find((p) => p.id === packageId);
+      if (!pkg) return;
+      const fails = items.filter((v) => v.result === "fail");
+
+      if (fails.length === 0) {
+        set((s) => ({
+          packages: s.packages.map((p) => (p.id === packageId ? { ...p, status: "verified" } : p)),
+        }));
+      } else {
+        const existingIssues = get().issues.filter(
+          (i) => i.packageId === packageId && i.taskId === taskId
+        );
+        const existingKeys = new Set(existingIssues.map((i) => `${i.category}:${i.type}`));
+
+        const newIssues: Issue[] = [];
+        fails.forEach((f) => {
+          const { type, description } = failToType(f, pkg);
+          const key = `${f.category}:${type}`;
+          if (existingKeys.has(key)) return;
+
+          const risk = pickRisk(f.category, type);
+          const evidence: PhotoEvidence[] = [];
+          if (f.photoUrl) {
+            evidence.push({
+              id: uid("E"),
+              type: "inspection",
+              url: f.photoUrl,
+              caption: f.label,
+              at: TODAY,
+              actor: ACTOR_INSPECTOR,
+            });
+          }
+
+          const issueId = `IS-2026-${String(20 + get().issues.length + newIssues.length).padStart(3, "0")}`;
+          newIssues.push({
+            id: issueId,
+            taskId,
+            packageId,
+            storeId: pkg.storeId,
+            category: f.category,
+            type,
+            description,
+            riskLevel: risk,
+            status: "open",
+            deadline: "2026-06-25",
+            assignee: get().stores.find((st) => st.id === pkg.storeId)?.manager || "",
+            createdAt: TODAY,
+            evidence,
+            timeline: [
+              {
+                node: "问题发现",
+                at: TODAY,
+                actor: ACTOR_INSPECTOR,
+                note: "现场核验自动判定",
+                photoIds: evidence.map((e) => e.id),
+              },
+            ],
+          });
+        });
+
+        set((s) => ({
+          issues: [...newIssues, ...s.issues],
+          packages: s.packages.map((p) => (p.id === packageId ? { ...p, status: "issue" } : p)),
+        }));
+      }
+
+      get().checkAndUpdateTaskStatus(taskId);
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    checkAndUpdateTaskStatus: (taskId) => {
+      const task = get().tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      if (task.status === "done" || task.status === "todo") return;
+
+      const pkgs = get().packages.filter((p) => task.packageIds.includes(p.id));
+      if (pkgs.length === 0) return;
+
+      const allSubmitted = pkgs.every((p) => p.status !== "pending");
+      if (!allSubmitted) return;
+
+      const hasIssue = pkgs.some((p) => p.status === "issue");
+      const newStatus: TaskStatus = hasIssue ? "review" : "done";
+
+      set((s) => ({
+        tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)),
+      }));
+    },
+
+    addIssueEvidence: (issueId, type, url, caption) => {
+      const evidence: PhotoEvidence = {
+        id: uid("E"),
+        type,
+        url,
+        caption,
+        at: TODAY,
+        actor: ACTOR_INSPECTOR,
+      };
+      set((s) => ({
+        issues: s.issues.map((i) =>
+          i.id === issueId ? { ...i, evidence: [...i.evidence, evidence] } : i
+        ),
+      }));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    setIssueDeadline: (issueId, deadline) => {
+      set((s) => ({
+        issues: s.issues.map((i) => (i.id === issueId ? { ...i, deadline } : i)),
+      }));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    submitRectification: (issueId, note, photos) => {
+      const newEvidence: PhotoEvidence[] = [];
+      if (photos?.beforeUrl) {
+        newEvidence.push({
+          id: uid("E"),
+          type: "rectify_before",
+          url: photos.beforeUrl,
+          caption: "整改前照片",
+          at: TODAY,
+          actor: get().issues.find((i) => i.id === issueId)?.assignee || "",
+        });
+      }
+      if (photos?.afterUrl) {
+        newEvidence.push({
+          id: uid("E"),
+          type: "rectify_after",
+          url: photos.afterUrl,
+          caption: "整改后照片",
+          at: TODAY,
+          actor: get().issues.find((i) => i.id === issueId)?.assignee || "",
+        });
+      }
+
+      set((s) => ({
+        issues: s.issues.map((i) => {
+          if (i.id !== issueId) return i;
+          const assignee = i.assignee;
           return {
             ...i,
-            status: "closed" as IssueStatus,
-            resolvedAt: "2026-06-18",
+            status: "review" as IssueStatus,
+            rectifyNote: note,
+            evidence: [...i.evidence, ...newEvidence],
             timeline: [
               ...i.timeline,
-              { node: "复核通过", at: "2026-06-18", actor: "院感·徐颖" },
-              { node: "关闭", at: "2026-06-18", actor: "系统" },
+              {
+                node: "整改提交",
+                at: TODAY,
+                actor: assignee,
+                note,
+                photoIds: newEvidence.map((e) => e.id),
+              },
             ],
           };
-        }
-        return {
-          ...i,
-          status: "rectifying" as IssueStatus,
-          timeline: [
-            ...i.timeline,
-            { node: "复核退回", at: "2026-06-18", actor: "院感·徐颖", note: "整改不到位，请重新处理" },
-          ],
-        };
-      }),
-    })),
-}));
+        }),
+      }));
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    reviewIssue: (issueId, pass, note, photoUrl) => {
+      const newEvidence: PhotoEvidence[] = [];
+      if (photoUrl) {
+        newEvidence.push({
+          id: uid("E"),
+          type: "review",
+          url: photoUrl,
+          caption: "复核照片",
+          at: TODAY,
+          actor: ACTOR_REVIEWER,
+        });
+      }
+
+      set((s) => ({
+        issues: s.issues.map((i) => {
+          if (i.id !== issueId) return i;
+          if (pass) {
+            return {
+              ...i,
+              status: "closed" as IssueStatus,
+              resolvedAt: TODAY,
+              evidence: [...i.evidence, ...newEvidence],
+              timeline: [
+                ...i.timeline,
+                {
+                  node: "复核通过",
+                  at: TODAY,
+                  actor: ACTOR_REVIEWER,
+                  note,
+                  photoIds: newEvidence.map((e) => e.id),
+                },
+                { node: "关闭", at: TODAY, actor: "系统" },
+              ],
+            };
+          }
+          return {
+            ...i,
+            status: "rectifying" as IssueStatus,
+            evidence: [...i.evidence, ...newEvidence],
+            timeline: [
+              ...i.timeline,
+              {
+                node: "复核退回",
+                at: TODAY,
+                actor: ACTOR_REVIEWER,
+                note: note || "整改不到位，请重新处理",
+                photoIds: newEvidence.map((e) => e.id),
+              },
+            ],
+          };
+        }),
+      }));
+
+      const issue = get().issues.find((i) => i.id === issueId);
+      if (issue) {
+        get().checkAndUpdateTaskStatus(issue.taskId);
+      }
+      saveToStorage(STORAGE_KEY, get());
+    },
+
+    resetDemoData: () => {
+      const freshState = {
+        stores: seedStores,
+        packages: seedPackages,
+        records: seedRecords,
+        tasks: seedTasks,
+        issues: seedIssues,
+        problems: seedProblems,
+        verifications: [],
+        currentStoreId: "ST01",
+        activeTaskId: "TK-2026-014",
+        activePackageId: null,
+      };
+      set(freshState);
+      saveToStorage(STORAGE_KEY, freshState);
+    },
+  };
+});

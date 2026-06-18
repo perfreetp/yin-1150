@@ -58,11 +58,23 @@ export interface VerificationItem {
   notes?: string;
 }
 
+export type PhotoEvidenceType = "inspection" | "rectify_before" | "rectify_after" | "review";
+
+export interface PhotoEvidence {
+  id: string;
+  type: PhotoEvidenceType;
+  url: string;
+  caption?: string;
+  at: string;
+  actor: string;
+}
+
 export interface TimelineNode {
   node: string;
   at: string;
   actor: string;
   note?: string;
+  photoIds?: string[];
 }
 
 export interface Issue {
@@ -79,8 +91,8 @@ export interface Issue {
   assignee: string;
   createdAt: string;
   resolvedAt?: string;
-  evidencePhoto?: string;
   rectifyNote?: string;
+  evidence: PhotoEvidence[];
   timeline: TimelineNode[];
 }
 

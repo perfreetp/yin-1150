@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useAuditStore } from "@/store/useAuditStore";
-import { Wifi, CircleDot, Database, Activity } from "lucide-react";
+import { Wifi, CircleDot, Database, Activity, RotateCcw } from "lucide-react";
 
 export function StatusBar() {
   const stores = useAuditStore((s) => s.stores);
   const currentStoreId = useAuditStore((s) => s.currentStoreId);
+  const resetDemoData = useAuditStore((s) => s.resetDemoData);
   const store = stores.find((s) => s.id === currentStoreId);
   const [time, setTime] = useState(new Date());
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setTime(new Date()), 1000);
@@ -16,6 +18,16 @@ export function StatusBar() {
   const hh = String(time.getHours()).padStart(2, "0");
   const mm = String(time.getMinutes()).padStart(2, "0");
   const ss = String(time.getSeconds()).padStart(2, "0");
+
+  const handleReset = () => {
+    if (showConfirm) {
+      resetDemoData();
+      setShowConfirm(false);
+    } else {
+      setShowConfirm(true);
+      setTimeout(() => setShowConfirm(false), 3000);
+    }
+  };
 
   return (
     <footer className="h-7 shrink-0 bg-ink-900 text-ink-300 flex items-center gap-4 px-4 font-mono text-[11px]">
@@ -39,6 +51,15 @@ export function StatusBar() {
         稽核员：督导·吴桐
       </span>
       <div className="flex-1" />
+      <button
+        onClick={handleReset}
+        className={`flex items-center gap-1.5 transition-colors ${showConfirm ? "text-risk" : "text-ink-400 hover:text-ink-200"}`}
+        title="重置演示数据"
+      >
+        <RotateCcw className="h-3 w-3" />
+        {showConfirm ? "确认重置？再次点击确认" : "重置演示数据"}
+      </button>
+      <span className="text-ink-700">|</span>
       <span className="flex items-center gap-1.5 text-ink-300">
         <Activity className="h-3 w-3 text-brand-300" />
         会话活动
